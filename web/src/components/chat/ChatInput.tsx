@@ -11,7 +11,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { Mic, Paperclip, SendHorizontal, Square } from "lucide-react";
+import { ClipboardList, Mic, Paperclip, SendHorizontal, Square } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,26 @@ interface ChatInputProps {
   aoParar: () => void;
   gerando: boolean;
   refTexto: RefObject<HTMLTextAreaElement | null>;
+  aoAbrirAnamnese: () => void;
+}
+
+const TAMANHO_MAXIMO_ARQUIVO = 10 * 1024 * 1024; // 10 MB
+
+/** Extrai o texto de .txt, .md, .pdf ou .docx no próprio navegador (o arquivo não vai para o servidor). */
+async function textoDoArquivo(arquivo: File): Promise<string> {
+  const nome = arquivo.name.toLowerCase();
+  if (nome.endsWith(".pdf")) {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const pdf = await getDocumentProxy(new Uint8Array(await arquivo.arrayBuffer()));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text;
+  }
+  if (nome.endsWith(".docx")) {
+    const mammoth = await import("mammoth");
+    const { value } = await mammoth.extractRawText({ arrayBuffer: await arquivo.arrayBuffer() });
+    return value;
+  }
+  return arquivo.text();
 }
 
 // Tipos mínimos da Web Speech API (ainda não fazem parte do lib.dom do TypeScript).
@@ -79,7 +99,7 @@ function ajustarAltura(e: FormEvent<HTMLTextAreaElement>) {
 const botaoIcone =
   "grid size-10 shrink-0 place-items-center rounded-xl text-cinza transition-colors duration-150 hover:bg-white/5 hover:text-ouro-claro focus-visible:ring-2 focus-visible:ring-ouro/60 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
 
-export function ChatInput({ valor, aoMudar, aoEnviar, aoParar, gerando, refTexto }: ChatInputProps) {
+export function ChatInput({ valor, aoMudar, aoEnviar, aoParar, gerando, refTexto, aoAbrirAnamnese }: ChatInputProps) {
   const refArquivo = useRef<HTMLInputElement>(null);
   const refVoz = useRef<ReconhecimentoVoz | null>(null);
   // O microfone só aparece se o navegador tiver reconhecimento de voz.
@@ -126,7 +146,17 @@ export function ChatInput({ valor, aoMudar, aoEnviar, aoParar, gerando, refTexto
 
   const anexar = async (arquivo: File | undefined) => {
     if (!arquivo) return;
-    const conteudo = (await arquivo.text()).trim();
+    if (arquivo.size > TAMANHO_MAXIMO_ARQUIVO) {
+      setAvisoAnexo("Arquivo grande demais (máximo 10 MB).");
+      return;
+    }
+    let conteudo: string;
+    try {
+      conteudo = (await textoDoArquivo(arquivo)).trim();
+    } catch {
+      setAvisoAnexo("Não consegui ler esse arquivo. Tente .txt, .md, .pdf ou .docx.");
+      return;
+    }
     if (refArquivo.current) refArquivo.current.value = "";
     if (!conteudo) {
       setAvisoAnexo("O arquivo está vazio.");
@@ -157,22 +187,34 @@ export function ChatInput({ valor, aoMudar, aoEnviar, aoParar, gerando, refTexto
         <Tooltip>
           <TooltipTrigger
             type="button"
-            aria-label="Anexar anotações em texto"
+            aria-label="Anexar anotações ou anamnese"
             className={botaoIcone}
             onClick={() => refArquivo.current?.click()}
             disabled={gerando}
           >
             <Paperclip className="size-5" aria-hidden />
           </TooltipTrigger>
-          <TooltipContent>Anexar anotações (.txt ou .md)</TooltipContent>
+          <TooltipContent>Anexar anotações ou anamnese (.pdf, .docx, .txt)</TooltipContent>
         </Tooltip>
         <input
           ref={refArquivo}
           type="file"
-          accept=".txt,.md,text/plain,text/markdown"
+          accept=".txt,.md,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="hidden"
           onChange={(e) => anexar(e.target.files?.[0])}
         />
+        <Tooltip>
+          <TooltipTrigger
+            type="button"
+            aria-label="Preencher anamnese"
+            className={botaoIcone}
+            onClick={aoAbrirAnamnese}
+            disabled={gerando}
+          >
+            <ClipboardList className="size-5" aria-hidden />
+          </TooltipTrigger>
+          <TooltipContent>Preencher a ficha de anamnese e gerar o roteiro</TooltipContent>
+        </Tooltip>
         <span aria-hidden className="mb-2.5 h-6 w-px shrink-0 self-end bg-white/10" />
 
         <Textarea

@@ -7,6 +7,7 @@ import { useChat } from "@/hooks/use-chat";
 import { useRolagemAutomatica } from "@/hooks/use-rolagem-automatica";
 import type { Atalho } from "@/lib/atalhos";
 import type { Fonte } from "@/lib/chat/tipos";
+import { AnamneseSheet } from "./AnamneseSheet";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
@@ -19,6 +20,7 @@ export function ChatApp() {
   const [texto, setTexto] = useState("");
   const [atalho, setAtalho] = useState<string>();
   const [fonte, setFonte] = useState<Fonte | null>(null);
+  const [anamneseAberta, setAnamneseAberta] = useState(false);
   const refArea = useRef<HTMLDivElement>(null);
   const refTexto = useRef<HTMLTextAreaElement>(null);
 
@@ -32,6 +34,10 @@ export function ChatApp() {
 
   const escolherAtalho = (escolhido: Atalho) => {
     setAtalho(escolhido.id);
+    if (escolhido.id === "roteiro-sessao") {
+      setAnamneseAberta(true);
+      return;
+    }
     setTexto(escolhido.sugestao);
     requestAnimationFrame(() => {
       const el = refTexto.current;
@@ -46,6 +52,12 @@ export function ChatApp() {
     acompanhar();
     void enviar(texto, atalho);
     setTexto("");
+  };
+
+  const enviarAnamnese = (texto: string) => {
+    acompanhar();
+    setAtalho("roteiro-sessao");
+    void enviar(texto, "roteiro-sessao");
   };
 
   const novaConversa = () => {
@@ -120,6 +132,7 @@ export function ChatApp() {
               aoParar={parar}
               gerando={gerando}
               refTexto={refTexto}
+              aoAbrirAnamnese={() => setAnamneseAberta(true)}
             />
             <p className="mt-2 text-center text-[11.5px] leading-snug text-cinza/70 sm:text-xs">
               <span className="sm:hidden">Não substitui avaliação clínica. Não inclua dados que identifiquem clientes.</span>
@@ -132,6 +145,7 @@ export function ChatApp() {
         </footer>
 
         <SourceSheet fonte={fonte} aoFechar={() => setFonte(null)} />
+        <AnamneseSheet aberto={anamneseAberta} aoFechar={() => setAnamneseAberta(false)} aoEnviar={enviarAnamnese} />
       </div>
     </MotionConfig>
   );

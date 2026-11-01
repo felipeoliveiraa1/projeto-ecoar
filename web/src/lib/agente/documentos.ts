@@ -13,12 +13,15 @@ const VALIDADE_MS = 10 * 60 * 1000;
 const cache = new Map<string, { conteudo: string; lidoEm: number }>();
 
 async function lerDoArquivo(slug: string): Promise<string> {
-  try {
-    const caminho = path.join(process.cwd(), "..", "conhecimento", `${slug}.md`);
-    return await readFile(/*turbopackIgnore: true*/ caminho, "utf-8");
-  } catch {
-    return "";
+  for (const extensao of [".md", ".json"]) {
+    try {
+      const caminho = path.join(process.cwd(), "..", "conhecimento", `${slug}${extensao}`);
+      return await readFile(/*turbopackIgnore: true*/ caminho, "utf-8");
+    } catch {
+      // tenta a próxima extensão
+    }
   }
+  return "";
 }
 
 export async function carregarDocumento(cfg: ConfigAgentes, slug: string): Promise<string> {

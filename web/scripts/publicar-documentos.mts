@@ -14,6 +14,7 @@ const DOCUMENTOS = [
   { slug: "voz-do-rafael", titulo: "Voz do Rafael", arquivo: "voz-do-rafael.md" },
   { slug: "glossario", titulo: "Glossário do método", arquivo: "glossario.md" },
   { slug: "faq", titulo: "Perguntas frequentes", arquivo: "faq.md" },
+  { slug: "ficha-anamnese", titulo: "Ficha de anamnese do Protocolo RB7 (JSON)", arquivo: "ficha-anamnese.json" },
 ];
 
 const url = process.env.SUPABASE_URL;

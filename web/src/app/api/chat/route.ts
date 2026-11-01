@@ -1,6 +1,7 @@
 import { lerConfig } from "@/lib/agente/config";
 import { executarAgente } from "@/lib/agente/grafo";
 import { ATALHOS } from "@/lib/atalhos";
+import { removerDadosPessoais } from "@/lib/privacidade";
 import type { EventoChat, Fonte, Papel } from "@/lib/chat/tipos";
 import { buscar, type ResultadoBusca } from "@/lib/server/busca";
 import { RESPOSTA_CRISE, temSinalDeCrise } from "@/lib/server/seguranca";
@@ -16,7 +17,7 @@ import { RESPOSTA_CRISE, temSinalDeCrise } from "@/lib/server/seguranca";
 export const maxDuration = 120;
 
 const MAX_MENSAGENS = 40;
-const MAX_CARACTERES = 6000;
+const MAX_CARACTERES = 20000; // a ficha de anamnese completa cabe aqui
 
 interface MensagemRecebida {
   papel: Papel;
@@ -37,7 +38,8 @@ function validar(corpo: unknown): { mensagens: MensagemRecebida[]; atalho?: stri
   if (validas.length !== mensagens.length || validas.at(-1)?.papel !== "usuario") return null;
   const tituloAtalho = typeof atalho === "string" ? ATALHOS.find((a) => a.id === atalho)?.titulo : undefined;
   return {
-    mensagens: validas.map((m) => ({ papel: m.papel, texto: m.texto.slice(0, MAX_CARACTERES) })),
+    // LGPD: CPF, telefone e e-mail nunca chegam ao modelo.
+    mensagens: validas.map((m) => ({ papel: m.papel, texto: removerDadosPessoais(m.texto.slice(0, MAX_CARACTERES)) })),
     atalho: tituloAtalho,
   };
 }
