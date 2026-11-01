@@ -1,0 +1,12 @@
+# Repositório PÚBLICO: só entra o código.
+# Conteúdo do curso do Rafael (transcrições, PDFs, extrações, Mapa, FAQ, casos, testes)
+# e dados da Kiwify ficam fora de propósito. Na nuvem, o conteúdo mora no Supabase.
+/*
+!/.gitignore
+!/README.md
+!/web/
+!/scripts/
+
+# Cache do Python
+__pycache__/
+*.pyc
