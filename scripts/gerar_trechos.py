@@ -34,14 +34,25 @@ def palavras(s):
     return len(s.split())
 
 
+ANONIMIZAR = None  # (regex, substituto), carregado em main() a partir de conhecimento/anonimizacao.json
+
+
+def anonimizar(texto):
+    """Troca primeiros nomes de participantes por "[participante]" (a base do agente é anonimizada)."""
+    if not ANONIMIZAR or not texto:
+        return texto
+    regex, substituto = ANONIMIZAR
+    return regex.sub(substituto, texto)
+
+
 def trechos_aula(arq):
-    titulo = arq.stem
+    titulo = anonimizar(unicodedata.normalize("NFC", arq.stem))
     n = int(titulo[:2])
     pars = []
     for linha in arq.read_text(encoding="utf-8").splitlines():
         m = MARCADOR.match(linha)
         if m:
-            pars.append((m.group(1), linha))
+            pars.append((m.group(1), anonimizar(linha)))
     blocos, atual = [], []
     for p in pars:
         atual.append(p)
@@ -120,7 +131,18 @@ def trechos_documento(arq):
 
 
 def main():
+    global ANONIMIZAR
     pasta_tr, pasta_docs, saida = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+    lista = pasta_tr.parent / "conhecimento" / "anonimizacao.json"
+    if lista.exists():
+        dados = json.loads(lista.read_text(encoding="utf-8"))
+        nomes = sorted(dados["nomes"], key=len, reverse=True)
+        # Não troca em "São Paulo" nem quando o nome vem antes de sobrenome de autor citado (ex.: Daniel Kahneman).
+        autores = dados.get("autores_preservados", [])
+        depois = r"(?!\s+(?:" + "|".join(re.escape(a) for a in autores) + r")\b)" if autores else ""
+        padrao = r"(?<!São )\b(?:" + "|".join(re.escape(n) for n in nomes) + r")\b" + depois
+        ANONIMIZAR = (re.compile(padrao), dados.get("substituto", "[participante]"))
+        print(f"anonimização: {len(nomes)} nomes")
     itens = []
     for arq in sorted(pasta_tr.glob("*.md")):
         itens.extend(trechos_aula(arq))

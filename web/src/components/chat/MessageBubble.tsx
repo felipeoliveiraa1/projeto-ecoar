@@ -17,20 +17,16 @@ interface MessageBubbleProps {
 
 const hora = (ms: number) => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-const PREFIXO_FONTE = "#fonte-";
-
 /**
- * Transforma as citações [n] da resposta em links internos para a fonte n.
- * Enquanto a resposta chega, citações ainda sem fonte ficam como texto; no fim,
- * as que não correspondem a nenhuma fonte conferida são removidas.
+ * Limpa o texto para leitura: tira os marcadores técnicos [n] (usados para conferir as
+ * fontes) e qualquer referência do tipo [Aula 9, 01:41] ou [Plano Ecoar, p. 12].
+ * As fontes continuam disponíveis no rodapé da resposta.
  */
-function prepararCitacoes(texto: string, fontes: Fonte[] | undefined, pendente: boolean): string {
-  const numeros = new Set((fontes ?? []).map((f) => f.numero).filter((n): n is number => n !== undefined));
-  return texto.replace(/\[(\d{1,2})\](?!\()/g, (marcador, n: string) => {
-    const numero = Number(n);
-    if (numeros.has(numero)) return `[${numero}](${PREFIXO_FONTE}${numero})`;
-    return pendente || numeros.size === 0 ? marcador : "";
-  });
+export function textoParaLeitura(texto: string): string {
+  return texto
+    .replace(/\s*\[(?:\d{1,2})(?:\]\s*\[\d{1,2})*\](?!\()/g, "")
+    .replace(/\s*\[(?:Aula|Aulas|Plano Ecoar|Método RB7|Anamnese|Mapa)[^\]\n]{0,80}\]/g, "")
+    .replace(/[ \t]+([.,;:!?])/g, "$1");
 }
 
 export function MessageBubble({ mensagem, aoAbrirFonte }: MessageBubbleProps) {
@@ -46,8 +42,7 @@ export function MessageBubble({ mensagem, aoAbrirFonte }: MessageBubbleProps) {
   }
 
   const aguardando = mensagem.pendente && !mensagem.texto;
-  const textoComCitacoes = prepararCitacoes(mensagem.texto, mensagem.fontes, Boolean(mensagem.pendente));
-  const fontePorNumero = new Map((mensagem.fontes ?? []).map((f) => [f.numero, f]));
+  const textoLimpo = textoParaLeitura(mensagem.texto);
 
   return (
     <div className="flex items-start gap-3 sm:gap-4">
@@ -68,21 +63,6 @@ export function MessageBubble({ mensagem, aoAbrirFonte }: MessageBubbleProps) {
                 components={{
                   a: ({ node, href, children, ...props }) => {
                     void node;
-                    if (href?.startsWith(PREFIXO_FONTE)) {
-                      const fonte = fontePorNumero.get(Number(href.slice(PREFIXO_FONTE.length)));
-                      if (!fonte) return <>{children}</>;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => aoAbrirFonte(fonte)}
-                          title={fonte.citacao}
-                          aria-label={`Fonte ${fonte.numero}: ${fonte.citacao}`}
-                          className="mx-0.5 inline-flex h-[1.35em] min-w-[1.35em] -translate-y-px items-center justify-center rounded-md border border-ouro/40 bg-ouro/10 px-1 align-middle text-[0.72em] leading-none font-semibold text-ouro-claro no-underline transition-colors duration-150 hover:border-ouro/70 hover:bg-ouro/20 focus-visible:ring-2 focus-visible:ring-ouro/60 focus-visible:outline-none"
-                        >
-                          {fonte.numero}
-                        </button>
-                      );
-                    }
                     return (
                       <a href={href} {...props} target="_blank" rel="noopener noreferrer">
                         {children}
@@ -91,7 +71,7 @@ export function MessageBubble({ mensagem, aoAbrirFonte }: MessageBubbleProps) {
                   },
                 }}
               >
-                {textoComCitacoes}
+                {textoLimpo}
               </Markdown>
             </div>
           )}
@@ -106,13 +86,7 @@ export function MessageBubble({ mensagem, aoAbrirFonte }: MessageBubbleProps) {
                   onClick={() => aoAbrirFonte(fonte)}
                   className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-ouro/35 bg-ouro/[0.07] px-3 py-1 text-left text-[12.5px] text-ouro-claro transition-colors duration-200 hover:border-ouro/60 hover:bg-ouro/15 focus-visible:ring-2 focus-visible:ring-ouro/60 focus-visible:outline-none"
                 >
-                  {fonte.numero !== undefined ? (
-                    <span className="grid size-4 shrink-0 place-items-center rounded bg-ouro/20 text-[10px] font-semibold">
-                      {fonte.numero}
-                    </span>
-                  ) : (
-                    <BookOpen className="size-3.5 shrink-0" aria-hidden />
-                  )}
+                  <BookOpen className="size-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{fonte.citacao}</span>
                 </button>
               ))}
@@ -122,7 +96,7 @@ export function MessageBubble({ mensagem, aoAbrirFonte }: MessageBubbleProps) {
 
         {!mensagem.pendente && mensagem.texto && (
           <div className="mt-1.5 flex items-center gap-1 pl-1">
-            {!mensagem.erro && <BotaoCopiar texto={mensagem.texto} />}
+            {!mensagem.erro && <BotaoCopiar texto={textoParaLeitura(mensagem.texto)} />}
             <time className="text-xs text-cinza/60">{hora(mensagem.criadaEm)}</time>
           </div>
         )}
