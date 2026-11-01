@@ -1,7 +1,7 @@
 import { Annotation, END, START, StateGraph, type LangGraphRunnableConfig } from "@langchain/langgraph";
 import type OpenAI from "openai";
 import type { EventoChat, Fonte, Papel } from "@/lib/chat/tipos";
-import { RESPOSTA_CRISE, temSinalDeCrise } from "@/lib/server/seguranca";
+import { RESPOSTA_ABUSO, RESPOSTA_CRISE, RESPOSTA_FILTRO, falaDeAbusoContraCrianca, temSinalDeCrise } from "@/lib/server/seguranca";
 import { buscarTrechos, type TrechoRecuperado } from "./busca-hibrida";
 import { clienteModelos } from "./clientes";
 import { carregarDocumento } from "./documentos";
@@ -59,6 +59,12 @@ const ESFORCO: Record<Intencao, "low" | "medium"> = {
   fora_do_escopo: "low",
   conversa: "low",
 };
+
+/** Erro do filtro de conteúdo da Azure (o pedido ou a resposta foi barrado). */
+function foiFiltrado(erro: unknown): boolean {
+  const e = erro as { status?: number; code?: string; message?: string };
+  return e?.code === "content_filter" || /content management policy|content_filter|filtered due to/i.test(String(e?.message ?? ""));
+}
 
 const ultimaPergunta = (mensagens: MensagemConversa[]) =>
   [...mensagens].reverse().find((m) => m.papel === "usuario")?.texto ?? "";
@@ -180,7 +186,9 @@ export function criarGrafo(cfg: ConfigAgentes) {
 
   const planejar = async (estado: Estado, config: LangGraphRunnableConfig) => {
     emitir(config, { tipo: "etapa", etapa: "Entendendo o pedido" });
-    const plano = await respostaJson<{ intencao: Intencao; consulta_busca: string; risco: boolean }>(
+    let plano: { intencao: Intencao; consulta_busca: string; risco: boolean };
+    try {
+      plano = await respostaJson<{ intencao: Intencao; consulta_busca: string; risco: boolean }>(
       cliente,
       cfg.modeloRapido,
       INSTRUCOES_PLANEJADOR,
@@ -188,6 +196,10 @@ export function criarGrafo(cfg: ConfigAgentes) {
       "plano",
       ESQUEMA_PLANEJADOR,
     );
+    } catch (erro) {
+      if (!foiFiltrado(erro)) throw erro;
+      plano = { intencao: "duvida_metodo", consulta_busca: ultimaPergunta(estado.mensagens), risco: false };
+    }
     return {
       intencao: plano.intencao,
       consultaBusca: plano.consulta_busca.trim() || ultimaPergunta(estado.mensagens),
@@ -209,7 +221,9 @@ export function criarGrafo(cfg: ConfigAgentes) {
     const lista = candidatos
       .map((t) => `id: ${t.id}\nfonte: ${rotuloDoTrecho(t)}\ntexto: ${t.texto.replace(/\s+/g, " ").slice(0, 600)}`)
       .join("\n\n---\n\n");
-    const { notas } = await respostaJson<{ notas: { id: string; nota: number }[] }>(
+    let notas: { id: string; nota: number }[];
+    try {
+      ({ notas } = await respostaJson<{ notas: { id: string; nota: number }[] }>(
       cliente,
       cfg.modeloRapido,
       INSTRUCOES_REORDENADOR,
@@ -217,7 +231,11 @@ export function criarGrafo(cfg: ConfigAgentes) {
       "notas",
       ESQUEMA_REORDENADOR,
       "minimal",
-    );
+    ));
+    } catch (erro) {
+      if (!foiFiltrado(erro)) throw erro;
+      return { selecionados: candidatos.slice(0, MAX_SELECIONADOS) };
+    }
     const nota = new Map(notas.map((n) => [n.id, n.nota]));
     const ordenados = candidatos
       .map((t, posicao) => ({ t, nota: nota.get(t.id) ?? 0, posicao }))
@@ -228,8 +246,25 @@ export function criarGrafo(cfg: ConfigAgentes) {
   };
 
   const responder = async (estado: Estado, config: LangGraphRunnableConfig) => {
+    try {
+      return await responderComModelo(estado, config, false);
+    } catch (erro) {
+      if (!foiFiltrado(erro)) throw erro;
+      try {
+        // O filtro pode ter reagido a um trecho sensível das aulas: tenta só com o Mapa.
+        return await responderComModelo(estado, config, true);
+      } catch (erro2) {
+        if (!foiFiltrado(erro2)) throw erro2;
+        const fixa = falaDeAbusoContraCrianca(ultimaPergunta(estado.mensagens)) ? RESPOSTA_ABUSO : RESPOSTA_FILTRO;
+        await emitirTextoEmPartes(config, fixa);
+        return { resposta: fixa, selecionados: [] };
+      }
+    }
+  };
+
+  const responderComModelo = async (estado: Estado, config: LangGraphRunnableConfig, semFontes: boolean) => {
     const intencao = estado.intencao ?? "duvida_metodo";
-    const selecionados = estado.selecionados ?? [];
+    const selecionados = semFontes ? [] : (estado.selecionados ?? []);
     emitir(config, { tipo: "etapa", etapa: intencao === "conteudo" ? "Escrevendo e revisando o conteúdo" : "Escrevendo a resposta" });
     const mapa = await carregarDocumento(cfg, "mapa-do-metodo");
     const blocoFontes = selecionados.length
@@ -264,7 +299,7 @@ export function criarGrafo(cfg: ConfigAgentes) {
       );
       const final = revisao.aprovado ? rascunho : revisao.texto_final;
       await emitirTextoEmPartes(config, final);
-      return { resposta: final };
+      return { resposta: final, selecionados };
     }
 
     let texto = "";
@@ -282,7 +317,7 @@ export function criarGrafo(cfg: ConfigAgentes) {
         emitir(config, { tipo: "texto", conteudo: evento.delta });
       }
     }
-    return { resposta: texto };
+    return { resposta: texto, selecionados };
   };
 
   const verificar = async (estado: Estado, config: LangGraphRunnableConfig) => {

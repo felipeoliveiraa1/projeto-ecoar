@@ -12,8 +12,8 @@ export function clienteModelos(config: ConfigAgentes): OpenAI {
     openai = new OpenAI({
       baseURL: `${base}/openai/v1/`,
       apiKey: config.azureApiKey,
-      maxRetries: 2,
-      timeout: 60_000,
+      maxRetries: 5, // o SDK espera o tempo indicado pela Azure quando bate no limite de tokens por minuto
+      timeout: 90_000,
     });
   }
   return openai;

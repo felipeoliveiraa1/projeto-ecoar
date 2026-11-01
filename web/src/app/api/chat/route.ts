@@ -142,7 +142,9 @@ export async function POST(request: Request) {
         console.info(`[chat] modo=${config ? "agente" : "previa"} ms=${Date.now() - inicio}`);
       } catch (erro) {
         if (!controle.signal.aborted) {
-          console.error(`[chat] falha (${(erro as Error).name}) ms=${Date.now() - inicio}`);
+          // Só o tipo e a mensagem técnica do erro (ex.: limite da Azure), nunca o conteúdo da conversa.
+          const e = erro as Error & { status?: number };
+          console.error(`[chat] falha ${e.status ?? ""} ${e.name}: ${String(e.message).slice(0, 160)} ms=${Date.now() - inicio}`);
           emitir({ tipo: "erro", mensagem: "Não consegui responder agora. Tente novamente em instantes." });
         }
       } finally {

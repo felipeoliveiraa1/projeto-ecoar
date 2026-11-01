@@ -130,6 +130,48 @@ def trechos_documento(arq):
         }
 
 
+SINTESES = {  # documentos da Fase 1 que entram na busca, um trecho por item "### "
+    "casos.md": "Biblioteca de casos",
+    "faq.md": "Perguntas frequentes",
+}
+
+
+def trechos_sintese(arq, nome):
+    """Divide um documento de síntese (casos, FAQ) em um trecho por item '### '."""
+    itens, atual = [], None
+    for linha in arq.read_text(encoding="utf-8").splitlines():
+        if linha.startswith("### "):
+            if atual:
+                itens.append(atual)
+            atual = [linha[4:].strip(), []]
+        elif linha.startswith("# ") or linha.startswith("## "):
+            if atual:
+                itens.append(atual)
+            atual = None
+        elif atual is not None:
+            atual[1].append(linha)
+    if atual:
+        itens.append(atual)
+    slug = re.sub(r"[^a-z0-9]+", "-", arq.stem.lower()).strip("-")
+    for i, (titulo, corpo) in enumerate(itens, 1):
+        texto = "\n".join(corpo).strip()
+        if palavras(texto) < 15:
+            continue
+        ws = texto.split()
+        if len(ws) > MAXIMO * 2:
+            texto = " ".join(ws[: MAXIMO * 2]) + " …"
+        yield {
+            "id": f"{slug}-{i:03d}",
+            "colecao": "metodo",
+            "fonte": "documento",
+            "documento": nome,
+            "pagina_inicio": None,
+            "pagina_fim": None,
+            "citacao": f"{nome} — {titulo}",
+            "texto": f"{titulo}\n\n{texto}",
+        }
+
+
 def main():
     global ANONIMIZAR
     pasta_tr, pasta_docs, saida = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
@@ -148,6 +190,10 @@ def main():
         itens.extend(trechos_aula(arq))
     for arq in sorted(pasta_docs.glob("*.txt")):
         itens.extend(trechos_documento(arq))
+    pasta_conhecimento = pasta_tr.parent / "conhecimento"
+    for arquivo, nome in SINTESES.items():
+        if (pasta_conhecimento / arquivo).exists():
+            itens.extend(trechos_sintese(pasta_conhecimento / arquivo, nome))
     saida.parent.mkdir(parents=True, exist_ok=True)
     with saida.open("w", encoding="utf-8") as f:
         for it in itens:
