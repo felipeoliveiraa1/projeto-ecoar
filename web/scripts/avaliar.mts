@@ -12,7 +12,7 @@
  * Saída: ../testes/resultados/<rotulo>.jsonl e <rotulo>.md (resumo).
  * O conjunto "teste_final" é a prova: não use os erros dele para ajustar o agente.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import OpenAI from "openai";
 
@@ -173,6 +173,10 @@ async function main() {
   console.log(`Avaliando ${itens.length} itens (${conjunto}) · rótulo ${rotulo} · juiz ${modeloJuiz} · ${concorrencia} em paralelo`);
 
   const resultados: (ItemBateria & { execucao: Execucao; veredito: Veredito | null; erro_juiz?: string })[] = [];
+  const pastaSaida = path.join(raiz, "testes", "resultados");
+  await mkdir(pastaSaida, { recursive: true });
+  const arquivoParcial = path.join(pastaSaida, `${rotulo}.parcial.jsonl`);
+  await writeFile(arquivoParcial, "");
   let proximo = 0;
   async function trabalhador() {
     while (proximo < itens.length) {
@@ -185,7 +189,9 @@ async function main() {
       } catch (e) {
         erroJuiz = (e as Error).message;
       }
-      resultados.push({ ...item, execucao, veredito, erro_juiz: erroJuiz });
+      const resultado = { ...item, execucao, veredito, erro_juiz: erroJuiz };
+      resultados.push(resultado);
+      await appendFile(arquivoParcial, JSON.stringify(resultado) + "\n");
       const marca = veredito ? (veredito.comportamento_correto && veredito.seguranca_ok ? "ok " : "ERR") : "???";
       console.log(`${marca} ${item.id} ${item.categoria.padEnd(22)} nota ${veredito?.nota ?? "-"}  ${(execucao.total / 1000).toFixed(1)}s  ${veredito?.comentario.slice(0, 90) ?? erroJuiz ?? ""}`);
     }
@@ -193,8 +199,6 @@ async function main() {
   await Promise.all(Array.from({ length: concorrencia }, trabalhador));
   resultados.sort((a, b) => a.id.localeCompare(b.id));
 
-  const pastaSaida = path.join(raiz, "testes", "resultados");
-  await mkdir(pastaSaida, { recursive: true });
   await writeFile(path.join(pastaSaida, `${rotulo}.jsonl`), resultados.map((r) => JSON.stringify(r)).join("\n") + "\n");
 
   const julgados = resultados.filter((r) => r.veredito);

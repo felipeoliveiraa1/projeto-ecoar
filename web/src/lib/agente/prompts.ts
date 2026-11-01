@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 export type Intencao = "duvida_metodo" | "sessao" | "treino" | "conteudo" | "fora_do_escopo" | "conversa";
 
 export const INTENCOES: Intencao[] = ["duvida_metodo", "sessao", "treino", "conteudo", "fora_do_escopo", "conversa"];
@@ -49,20 +46,6 @@ const INSTRUCOES_POR_INTENCAO: Record<Intencao, string> = {
   fora_do_escopo: `Tarefa: a mensagem foge do Método RB7 ou pede algo que você não faz (diagnóstico, prescrição, assunto fora do curso). Explique com gentileza o que você faz e ofereça um caminho dentro do método. Seja breve.`,
   conversa: `Tarefa: mensagem social ou de orientação (saudação, agradecimento, "o que você faz?"). Responda em 1 a 3 frases e mostre como você pode ajudar: dúvidas do método, preparação de sessão, treino de atendimento e conteúdo.`,
 };
-
-let mapaCache: string | null = null;
-
-/** Mapa do Método (documento-base da Fase 1). Enquanto não existir, os agentes usam só as fontes. */
-export async function carregarMapa(): Promise<string> {
-  if (mapaCache !== null) return mapaCache;
-  const caminho = process.env.MAPA_PATH ?? path.join(process.cwd(), "..", "conhecimento", "mapa-do-metodo.md");
-  try {
-    mapaCache = await readFile(/*turbopackIgnore: true*/ caminho, "utf-8");
-  } catch {
-    mapaCache = "";
-  }
-  return mapaCache;
-}
 
 export function instrucoesDoAgente(intencao: Intencao, mapa: string): string {
   const partes = [REGRAS_BASE, INSTRUCOES_POR_INTENCAO[intencao]];

@@ -4,6 +4,7 @@ import type { EventoChat, Fonte, Papel } from "@/lib/chat/tipos";
 import { RESPOSTA_CRISE, temSinalDeCrise } from "@/lib/server/seguranca";
 import { buscarTrechos, type TrechoRecuperado } from "./busca-hibrida";
 import { clienteModelos } from "./clientes";
+import { carregarDocumento } from "./documentos";
 import type { ConfigAgentes } from "./config";
 import {
   ESQUEMA_PLANEJADOR,
@@ -12,7 +13,6 @@ import {
   INSTRUCOES_PLANEJADOR,
   INSTRUCOES_REORDENADOR,
   INSTRUCOES_REVISOR_CONTEUDO,
-  carregarMapa,
   instrucoesDoAgente,
   type Intencao,
 } from "./prompts";
@@ -231,7 +231,7 @@ export function criarGrafo(cfg: ConfigAgentes) {
     const intencao = estado.intencao ?? "duvida_metodo";
     const selecionados = estado.selecionados ?? [];
     emitir(config, { tipo: "etapa", etapa: intencao === "conteudo" ? "Escrevendo e revisando o conteúdo" : "Escrevendo a resposta" });
-    const mapa = await carregarMapa();
+    const mapa = await carregarDocumento(cfg, "mapa-do-metodo");
     const blocoFontes = selecionados.length
       ? selecionados.map((t, i) => `[${i + 1}] ${rotuloDoTrecho(t)}\n${t.texto}`).join("\n\n")
       : "(nenhuma fonte encontrada no material para este pedido)";
